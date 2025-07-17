@@ -31,6 +31,16 @@
       top: 0;
       left: 0;
     }
+    #toggle-camera {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #006233;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -41,12 +51,14 @@
     <canvas id="canvas"></canvas>
   </div>
 
+  <button id="toggle-camera">🔄 تبديل الكاميرا</button>
+
   <audio id="beep" src="https://www.soundjay.com/buttons/sounds/button-3.mp3" preload="auto"></audio>
-  
-<div id="recognized-names" style="margin-top: 20px; text-align: right; padding: 10px; max-width: 320px; margin-inline: auto; background: #fff; border-radius: 10px; border: 1px solid #ccc;">
-  <strong>✅ تم التعرف على:</strong>
-  <ul id="names-list" style="list-style: none; padding-right: 0; margin-top: 10px;"></ul>
-</div>
+
+  <div id="recognized-names" style="margin-top: 20px; text-align: right; padding: 10px; max-width: 320px; margin-inline: auto; background: #fff; border-radius: 10px; border: 1px solid #ccc;">
+    <strong>✅ تم التعرف على:</strong>
+    <ul id="names-list" style="list-style: none; padding-right: 0; margin-top: 10px;"></ul>
+  </div>
 
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script>
@@ -55,14 +67,23 @@
     const context = canvas.getContext('2d');
     const beep = document.getElementById('beep');
     const attendanceSet = new Set();
+    const toggleBtn = document.getElementById('toggle-camera');
+
     let faceMatcher;
+    let currentFacingMode = 'environment';
+    let currentStream;
 
     async function startVideo() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
+          video: { facingMode: { ideal: currentFacingMode } },
           audio: false
         });
+        currentStream = stream;
         video.srcObject = stream;
       } catch (err) {
         alert("⚠️ تعذر تشغيل الكاميرا: " + err.message);
@@ -70,8 +91,21 @@
       }
     }
 
+    toggleBtn.onclick = async () => {
+      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      await startVideo();
+    };
+
+    function addRecognizedName(name) {
+      const list = document.getElementById('names-list');
+      const item = document.createElement('li');
+      const now = new Date().toLocaleString('ar-DZ');
+      item.textContent = `📌 ${name} - ${now}`;
+      list.prepend(item);
+    }
+
     async function loadLabeledImages() {
-      const labels = ['adel', 'فاطمة', 'imad']; // أسماء الصور بدون .jpg
+      const labels = ['adel', 'فاطمة', 'imad'];
       const descriptors = [];
 
       for (const label of labels) {
@@ -122,28 +156,28 @@
             const name = bestMatch.label;
             const box = detection.detection.box;
 
-            // رسم المستطيل
             context.strokeStyle = '#00ff00';
             context.lineWidth = 2;
             context.strokeRect(box.x, box.y, box.width, box.height);
 
-            // اسم الطالب
             context.fillStyle = '#006233';
             context.fillRect(box.x, box.y - 20, box.width, 20);
             context.fillStyle = 'white';
             context.font = '16px Cairo';
             context.fillText(name, box.x + 5, box.y - 5);
 
-            // تشغيل صوت وتسجيل الحضور
-if (name !== 'unknown' && !attendanceSet.has(name)) {
-  attendanceSet.add(name);
-  beep.play();
-  console.log("✅ تم تسجيل حضور:", name);
-  addRecognizedName(name);
-  // sendToGoogleSheet(name);
-}
+            if (name !== 'unknown' && !attendanceSet.has(name)) {
+              attendanceSet.add(name);
+              beep.play();
+              console.log("✅ تم تسجيل حضور:", name);
+              addRecognizedName(name);
+            }
+          }
+        }, 1000);
+      });
+    }
 
-
+    // ✅ بداية التنفيذ
     window.addEventListener('DOMContentLoaded', async () => {
       await startVideo();
       await init();
