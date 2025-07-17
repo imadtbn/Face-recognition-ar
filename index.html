@@ -1,36 +1,138 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>عيادة الرحمة - نظام التعرف على الوجه</title>
+  <title>عيادة الرحمة - التعرف على الوجه</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script defer src="script.js"></script>
+  <style>
+    body {
+      font-family: 'Tahoma', sans-serif;
+      margin: 0;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+
+    header {
+      background-color: #00897b;
+      color: white;
+      text-align: center;
+      padding: 20px 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 26px;
+    }
+
+    header h2 {
+      margin: 5px 0 0;
+      font-size: 18px;
+      font-weight: normal;
+    }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      margin: 20px 0;
+      gap: 10px;
+    }
+
+    .tabs button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #00897b;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+    }
+
+    .tabs button:hover {
+      background-color: #00796b;
+    }
+
+    .section {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    input[type="text"] {
+      padding: 10px;
+      width: 250px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+
+    button.capture-btn {
+      background-color: #43a047;
+      color: white;
+      padding: 10px 25px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    video {
+      width: 320px;
+      height: auto;
+      border: 2px solid #00897b;
+      border-radius: 10px;
+      margin-top: 15px;
+    }
+
+    #result {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #00695c;
+    }
+  </style>
 </head>
 <body>
   <header>
     <h1>عيادة الرحمة</h1>
     <h2>نظام التعرف على الوجه</h2>
   </header>
-  <main>
-    <div class="tabs">
-      <button onclick="showSection('register')">تسجيل وجه جديد</button>
-      <button onclick="showSection('recognize')">التعرف على الوجه</button>
-    </div>
 
-    <section id="register" class="section">
-      <h3>تسجيل وجه جديد</h3>
+  <div class="tabs">
+    <button onclick="showSection('register')">📷 تسجيل وجه جديد</button>
+    <button onclick="showSection('recognize')">🔍 التعرف على الوجه</button>
+  </div>
+
+  <main>
+    <section id="register" class="section active">
+      <h3>📌 تسجيل وجه جديد</h3>
       <input type="text" id="nameInput" placeholder="اكتب اسم المستخدم">
-      <button onclick="captureFace()">التقاط الوجه</button>
-      <video id="videoRegister" autoplay muted></video>
+      <br>
+      <button class="capture-btn" onclick="captureFace()">التقاط الوجه</button>
+      <br>
+      <video id="videoRegister" autoplay muted playsinline></video>
     </section>
 
-    <section id="recognize" class="section hidden">
-      <h3>بدء التعرف على الوجه</h3>
-      <video id="videoRecognize" autoplay muted></video>
-      <p id="result">جارٍ المعالجة...</p>
+    <section id="recognize" class="section">
+      <h3>🔍 التعرف على الوجه</h3>
+      <video id="videoRecognize" autoplay muted playsinline></video>
+      <p id="result">🔄 جارٍ المعالجة...</p>
     </section>
   </main>
+
+  <script>
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+    }
+  </script>
 </body>
 </html>
