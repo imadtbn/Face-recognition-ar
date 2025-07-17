@@ -5,22 +5,72 @@
   <title>📸 نظام التعرف على الوجوه</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: 'Cairo', sans-serif; background: #f0f0f0; text-align: center; margin: 0; padding: 20px; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #f0f0f0;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
     h2 { color: #006233; }
-    .video-container { position: relative; display: inline-block; }
-    video, canvas { width: 100%; max-width: 320px; border: 2px solid #006233; border-radius: 12px; margin-top: 15px; }
-    canvas { position: absolute; top: 0; left: 0; }
-    #toggle-camera { margin-top: 15px; padding: 10px 20px; font-size: 16px; background-color: #006233; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+    .video-container {
+      position: relative;
+      display: inline-block;
+    }
+    video, canvas {
+      width: 100%;
+      max-width: 320px;
+      border: 2px solid #006233;
+      border-radius: 12px;
+      margin-top: 15px;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #toggle-camera, #register-face {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #006233;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    #nameInput {
+      padding: 8px;
+      font-size: 16px;
+      margin-top: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 70%;
+    }
   </style>
 </head>
 <body>
+
   <h2>📸 نظام التعرف على الوجوه</h2>
+
   <div class="video-container">
     <video id="video" autoplay muted playsinline></video>
     <canvas id="canvas"></canvas>
   </div>
+
+  <br>
   <button id="toggle-camera">🔄 تبديل الكاميرا</button>
+
+  <br>
+  <input type="text" id="nameInput" placeholder="🖊️ أدخل اسمك الكامل">
+  <br>
+  <button id="register-face">📸 تسجيل وجه جديد</button>
+
   <audio id="beep" src="https://www.soundjay.com/buttons/sounds/button-3.mp3" preload="auto"></audio>
+
   <div id="recognized-names" style="margin-top: 20px; text-align: right; padding: 10px; max-width: 320px; margin-inline: auto; background: #fff; border-radius: 10px; border: 1px solid #ccc;">
     <strong>✅ تم التعرف على:</strong>
     <ul id="names-list" style="list-style: none; padding-right: 0; margin-top: 10px;"></ul>
@@ -33,6 +83,8 @@
     const ctx = canvas.getContext('2d');
     const beep = document.getElementById('beep');
     const toggleBtn = document.getElementById('toggle-camera');
+    const registerBtn = document.getElementById('register-face');
+    const nameInput = document.getElementById('nameInput');
     const attendance = new Set();
 
     let faceMatcher, stream, facing = 'environment';
@@ -40,7 +92,10 @@
     async function startVideo() {
       if (stream) stream.getTracks().forEach(t => t.stop());
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing } },
+          audio: false
+        });
         video.srcObject = stream;
       } catch (e) {
         alert('⚠️ تعذر تشغيل الكاميرا: ' + e.message);
@@ -60,16 +115,34 @@
     }
 
     async function loadLabels() {
-      const labels = ['adel','fatima','imad'];
+      const labels = ['adel','fatima','imad']; // ضع هنا الأسماء المسجلة مسبقًا
       const descriptors = [];
       for (let label of labels) {
         const img = await faceapi.fetchImage(`students/${label}.jpg`);
         const res = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-        if (!res) { console.warn('❌ لا وجه في', label); continue; }
+        if (!res) {
+          console.warn('❌ لا وجه في', label);
+          continue;
+        }
         descriptors.push(new faceapi.LabeledFaceDescriptors(label, [res.descriptor]));
       }
       return descriptors;
     }
+
+    registerBtn.onclick = () => {
+      const name = nameInput.value.trim();
+      if (!name) return alert("⚠️ أدخل الاسم قبل تسجيل الوجه.");
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(video, 0, 0);
+      const a = document.createElement('a');
+      a.href = tempCanvas.toDataURL('image/jpeg');
+      a.download = name + '.jpg';
+      a.click();
+      alert("✅ تم حفظ صورة الوجه. يرجى إضافتها إلى مجلد students/");
+    };
 
     async function init() {
       await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
@@ -82,20 +155,31 @@
       video.addEventListener('play', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+
         setInterval(async () => {
-          const dets = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
-          const resized = faceapi.resizeResults(dets, { width: canvas.width, height: canvas.height });
+          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks().withFaceDescriptors();
+
+          const resized = faceapi.resizeResults(detections, {
+            width: canvas.width,
+            height: canvas.height
+          });
+
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          for (let r of resized) {
-            const match = faceMatcher.findBestMatch(r.descriptor);
+          for (let result of resized) {
+            const match = faceMatcher.findBestMatch(result.descriptor);
             const name = match.label;
-            const box = r.detection.box;
-            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
+            const box = result.detection.box;
+
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
             ctx.strokeRect(box.x, box.y, box.width, box.height);
-            ctx.fillStyle = '#006233'; ctx.fillRect(box.x, box.y-20, box.width, 20);
-            ctx.fillStyle = 'white'; ctx.font = '16px Cairo';
-            ctx.fillText(name, box.x+5, box.y-5);
+            ctx.fillStyle = '#006233';
+            ctx.fillRect(box.x, box.y - 20, box.width, 20);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Cairo';
+            ctx.fillText(name, box.x + 5, box.y - 5);
 
             if (name !== 'unknown' && !attendance.has(name)) {
               attendance.add(name);
