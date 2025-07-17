@@ -2,103 +2,78 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>نظام التعرف على الوجوه</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <title>نظام التعرف على الوجوه - نسخة خفيفة للجوال</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      text-align: center;
+      background: #f0f0f0;
     }
-    #results {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.5);
-      color: white;
-      padding: 10px;
-      max-height: 200px;
-      overflow-y: auto;
-      font-family: Arial;
+    video, canvas {
+      width: 100%;
+      max-width: 320px;
+      border: 2px solid #006233;
+      border-radius: 12px;
+      margin-top: 15px;
     }
   </style>
 </head>
 <body>
-  <div style="position: relative; width: 720px; height: 560px;">
-    <video id="video" width="720" height="560" autoplay muted></video>
-    <canvas id="overlay" width="720" height="560"></canvas>
-    <div id="results"><strong>الوجوه المعروفة:</strong><ul id="results-list"></ul></div>
-  </div>
+  <h2>👁️ نظام التعرف على الوجوه</h2>
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay" style="position: absolute; top: 0; left: 0;"></canvas>
 
+  <!-- مكتبة face-api.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script>
     const video = document.getElementById('video');
+    const canvas = document.getElementById('overlay');
+    let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // تحميل النماذج
-    Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('/models')
-    ]).then(startVideo);
-
-    function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: {} })
-        .then(stream => video.srcObject = stream)
-        .catch(err => console.error("خطأ في تشغيل الكاميرا:", err));
-    }
-
-    video.addEventListener('playing', async () => {
-      const canvas = document.getElementById('overlay');
-      const displaySize = { width: video.width, height: video.height };
-      faceapi.matchDimensions(canvas, displaySize);
-
-      const labeledDescriptors = await loadLabeledImages();
-      const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
-
-      setInterval(async () => {
-        const detections = await faceapi
-          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptors();
-
-        const resizedDetections = faceapi.resizeResults(detections, displaySize);
-        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-
-        resizedDetections.forEach(d => {
-          const match = faceMatcher.findBestMatch(d.descriptor);
-          const box = d.detection.box;
-          const drawBox = new faceapi.draw.DrawBox(box, { label: match.toString() });
-          drawBox.draw(canvas);
-
-          addResult(match.label);
+    async function startVideo() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          },
+          audio: false
         });
-      }, 1000);
-    });
-
-    function addResult(name) {
-      const list = document.getElementById('results-list');
-      const exists = [...list.children].some(li => li.textContent === name);
-      if (!exists && name !== 'unknown') {
-        const li = document.createElement('li');
-        li.textContent = name;
-        list.appendChild(li);
+        video.srcObject = stream;
+      } catch (err) {
+        alert("حدث خطأ في تشغيل الكاميرا: " + err.message);
+        console.error(err);
       }
     }
 
-    function loadLabeledImages() {
-      const labels = ['adel', 'imad', 'karim', 'salma']; // ضع أسماء الصور بدون .jpg
-      return Promise.all(
-        labels.map(async label => {
-          const imgUrl = `/students/${label}.jpg`;
-          const img = await faceapi.fetchImage(imgUrl);
-          const detections = await faceapi
-            .detectSingleFace(img)
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-          if (!detections) throw new Error(`لا يمكن التعرف على الوجه في ${label}.jpg`);
-          return new faceapi.LabeledFaceDescriptors(label, [detections.descriptor]);
-        })
-      );
+    async function initFaceDetection() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/models'); // تأكد من أن مجلد models موجود
+
+      video.addEventListener('play', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const displaySize = { width: video.videoWidth, height: video.videoHeight };
+        faceapi.matchDimensions(canvas, displaySize);
+
+        setInterval(async () => {
+          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+          const resizedDetections = faceapi.resizeResults(detections, displaySize);
+
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resizedDetections);
+        }, 300); // كشف كل 300ms فقط لتحسين الأداء
+      });
     }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await startVideo();
+      await initFaceDetection();
+    });
   </script>
 </body>
 </html>
