@@ -1,0 +1,36 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>عيادة الرحمة - نظام التعرف على الوجه</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <header>
+    <h1>عيادة الرحمة</h1>
+    <h2>نظام التعرف على الوجه</h2>
+  </header>
+  <main>
+    <div class="tabs">
+      <button onclick="showSection('register')">تسجيل وجه جديد</button>
+      <button onclick="showSection('recognize')">التعرف على الوجه</button>
+    </div>
+
+    <section id="register" class="section">
+      <h3>تسجيل وجه جديد</h3>
+      <input type="text" id="nameInput" placeholder="اكتب اسم المستخدم">
+      <button onclick="captureFace()">التقاط الوجه</button>
+      <video id="videoRegister" autoplay muted></video>
+    </section>
+
+    <section id="recognize" class="section hidden">
+      <h3>بدء التعرف على الوجه</h3>
+      <video id="videoRecognize" autoplay muted></video>
+      <p id="result">جارٍ المعالجة...</p>
+    </section>
+  </main>
+</body>
+</html>
