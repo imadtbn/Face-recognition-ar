@@ -150,7 +150,6 @@
 
       const { box } = detection.detection;
 
-      // قص الوجه فقط من الصورة
       const faceCanvas = document.createElement('canvas');
       faceCanvas.width = box.width;
       faceCanvas.height = box.height;
@@ -165,9 +164,13 @@
     };
 
     async function init() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js-models@master/weights';
+
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
 
       const labeled = await loadLabels();
       if (!labeled.length) return alert('⚠️ لم يتم تحميل أي وجه.');
@@ -195,7 +198,6 @@
             const box = result.detection.box;
             lastDetectedBox = box;
 
-            // رسم الإطار حول الوجه
             ctx.strokeStyle = '#00ff00';
             ctx.lineWidth = 2;
             ctx.strokeRect(box.x, box.y, box.width, box.height);
