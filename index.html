@@ -1,48 +1,147 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>نظام التعرف على الوجه</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام التعرف على الوجوه</title>
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-  <script defer src="script.js"></script>
   <style>
     body {
       font-family: 'Cairo', sans-serif;
       text-align: center;
       background-color: #f0f0f0;
-      padding: 20px;
+      direction: rtl;
     }
-    video {
-      border: 2px solid #009688;
-      border-radius: 10px;
-      margin: 10px;
-      max-width: 100%;
+    video, canvas {
+      border-radius: 12px;
+      max-width: 95vw;
     }
-    input, button {
-      margin: 10px;
-      padding: 10px;
+    #info {
+      margin-top: 20px;
+      font-size: 18px;
+      color: green;
+    }
+    button {
+      padding: 10px 20px;
       font-size: 16px;
+      margin: 10px;
+      border: none;
+      border-radius: 10px;
+      background-color: #006233;
+      color: white;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <h1>نظام التعرف على الوجه - عيادة الرحمة</h1>
+  <h1>📷 نظام الحضور بالتعرف على الوجوه</h1>
+  <button onclick="toggleCamera()">🔁 تبديل الكاميرا</button>
+  <video id="video" autoplay muted></video>
+  <canvas id="overlay"></canvas>
+  <div id="info">يرجى الانتظار...</div>
 
-  <section id="registerSection" class="section">
-    <h2>تسجيل وجه جديد</h2>
-    <input id="nameInput" type="text" placeholder="أدخل اسم المستخدم" />
-    <br>
-    <video id="videoRegister" width="320" height="240" autoplay muted></video>
-    <br>
-    <button onclick="captureFace()">تسجيل الوجه</button>
-  </section>
+  <script>
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const context = overlay.getContext('2d');
+    const info = document.getElementById('info');
 
-  <section id="recognizeSection" class="section">
-    <h2>التعرف على الوجه</h2>
-    <video id="videoRecognize" width="320" height="240" autoplay muted></video>
-    <div id="result" style="margin-top: 10px; font-weight: bold;"></div>
-  </section>
+    let usingFrontCamera = false;
+    let labeledDescriptors;
+    let attendance = new Set();
+
+    async function loadModels() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+      info.innerText = '✅ تم تحميل النماذج بنجاح';
+    }
+
+    async function startVideo() {
+      const constraints = {
+        video: { facingMode: usingFrontCamera ? 'user' : { exact: 'environment' } }
+      };
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+      } catch (e) {
+        alert('حدث خطأ في فتح الكاميرا: ' + e.message);
+      }
+    }
+
+    function toggleCamera() {
+      usingFrontCamera = !usingFrontCamera;
+      startVideo();
+    }
+
+    async function loadLabeledImages() {
+      const labels = ['أحمد', 'فاطمة', 'ياسين']; // ضع أسماء التلاميذ هنا
+      return Promise.all(
+        labels.map(async label => {
+          const imgUrl = `/students/${label}.jpg`;
+          const img = await faceapi.fetchImage(imgUrl);
+          const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+          return new faceapi.LabeledFaceDescriptors(label, [detections.descriptor]);
+        })
+      );
+    }
+
+    video.addEventListener('play', () => {
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+
+      setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptors();
+
+        context.clearRect(0, 0, overlay.width, overlay.height);
+        const resized = faceapi.resizeResults(detections, {
+          width: overlay.width,
+          height: overlay.height
+        });
+
+        resized.forEach(detection => {
+          const box = detection.detection.box;
+          context.strokeStyle = '#00ff00';
+          context.lineWidth = 3;
+          context.strokeRect(box.x, box.y, box.width, box.height);
+        });
+
+        if (labeledDescriptors && detections.length > 0) {
+          const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+          resized.forEach(detection => {
+            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+            const name = bestMatch.label;
+            if (!attendance.has(name)) {
+              attendance.add(name);
+              info.innerText = `🎉 تم تسجيل حضور: ${name}`;
+              saveAttendanceToSheet(name);
+            }
+            const box = detection.detection.box;
+            context.fillStyle = '#006233';
+            context.fillRect(box.x, box.y - 20, box.width, 20);
+            context.fillStyle = 'white';
+            context.fillText(name, box.x + 5, box.y - 5);
+          });
+        }
+      }, 1500);
+    });
+
+    async function saveAttendanceToSheet(name) {
+      const date = new Date().toLocaleDateString('ar-DZ');
+      const time = new Date().toLocaleTimeString('ar-DZ');
+      await fetch('https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec', {
+        method: 'POST',
+        body: JSON.stringify({ name, date, time }),
+      });
+    }
+
+    // تحميل النماذج وبدء التشغيل
+    loadModels().then(async () => {
+      labeledDescriptors = await loadLabeledImages();
+      startVideo();
+    });
+  </script>
 </body>
 </html>
