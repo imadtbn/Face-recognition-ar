@@ -225,4 +225,51 @@
   loadModelsAndStart();
 </script>
 
+  <script>
+  let faceMatcher;
+  const attendanceSet = new Set(); // لتجنب التكرار
+
+  async function startFaceRecognition() {
+    // إنشاء كائن المطابقة
+    faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6); // الحساسية
+
+    const video = document.getElementById('video');
+
+    video.addEventListener('play', () => {
+      const canvas = faceapi.createCanvasFromMedia(video);
+      document.body.append(canvas);
+
+      const displaySize = { width: video.width, height: video.height };
+      faceapi.matchDimensions(canvas, displaySize);
+
+      setInterval(async () => {
+        const detections = await faceapi
+          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptors();
+
+        const resized = faceapi.resizeResults(detections, displaySize);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+
+        const results = resized.map(d => faceMatcher.findBestMatch(d.descriptor));
+
+        results.forEach((result, i) => {
+          const box = resized[i].detection.box;
+          const name = result.label;
+
+          if (name !== "unknown" && !attendanceSet.has(name)) {
+            attendanceSet.add(name);
+            console.log("✅ تم التعرف على:", name);
+            sendAttendanceToGoogleSheet(name);
+          }
+
+          const drawBox = new faceapi.draw.DrawBox(box, { label: name });
+          drawBox.draw(canvas);
+        });
+      }, 1000);
+    });
+  }
+</script>
+
+
 </html>
