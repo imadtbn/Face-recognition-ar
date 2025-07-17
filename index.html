@@ -2,18 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>نظام التعرف على الوجوه</title>
+  <title>📸 نظام التعرف على الوجوه</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      margin: 0;
-      font-family: sans-serif;
-      text-align: center;
+      font-family: 'Cairo', sans-serif;
       background: #f0f0f0;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
     }
     h2 {
       color: #006233;
-      margin-top: 10px;
     }
     .video-container {
       position: relative;
@@ -35,26 +35,32 @@
 </head>
 <body>
   <h2>📸 نظام التعرف على الوجوه</h2>
+
   <div class="video-container">
     <video id="video" autoplay muted playsinline></video>
-    <canvas id="overlay"></canvas>
+    <canvas id="canvas"></canvas>
   </div>
+
+  <audio id="beep" src="https://www.soundjay.com/buttons/sounds/button-3.mp3" preload="auto"></audio>
+  
+<div id="recognized-names" style="margin-top: 20px; text-align: right; padding: 10px; max-width: 320px; margin-inline: auto; background: #fff; border-radius: 10px; border: 1px solid #ccc;">
+  <strong>✅ تم التعرف على:</strong>
+  <ul id="names-list" style="list-style: none; padding-right: 0; margin-top: 10px;"></ul>
+</div>
 
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('overlay');
-    let labeledFaceDescriptors = [];
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    const beep = document.getElementById('beep');
+    const attendanceSet = new Set();
+    let faceMatcher;
 
-    // بدء تشغيل الكاميرا
     async function startVideo() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 320 },
-            height: { ideal: 240 }
-          },
+          video: { facingMode: { ideal: 'environment' } },
           audio: false
         });
         video.srcObject = stream;
@@ -64,69 +70,83 @@
       }
     }
 
-    // تحميل صور الطلاب وتحويلها إلى أوصاف الوجوه
     async function loadLabeledImages() {
-      const labels = ['adel', 'فاطمة', 'imad']; // ضع هنا أسماء الصور بدون .jpg
+      const labels = ['adel', 'فاطمة', 'imad']; // أسماء الصور بدون .jpg
+      const descriptors = [];
 
-      return Promise.all(
-        labels.map(async label => {
-          const imgUrl = `students/${label}.jpg`;
-          const img = await faceapi.fetchImage(imgUrl);
-          const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+      for (const label of labels) {
+        const imgUrl = `students/${label}.jpg`;
+        const img = await faceapi.fetchImage(imgUrl);
+        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+        if (!detection) {
+          console.warn(`❌ لم يتم التعرف على وجه في صورة ${label}`);
+          continue;
+        }
+        descriptors.push(new faceapi.LabeledFaceDescriptors(label, [detection.descriptor]));
+      }
 
-          if (!detection) {
-            console.warn(`❌ لم يتم التعرف على وجه في صورة ${label}`);
-            return null;
-          }
-
-          return new faceapi.LabeledFaceDescriptors(label, [detection.descriptor]);
-        })
-      ).then(descriptors => descriptors.filter(Boolean)); // حذف العناصر الفارغة
+      return descriptors;
     }
 
-    async function initFaceRecognition() {
+    async function init() {
       await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
 
-      labeledFaceDescriptors = await loadLabeledImages();
+      const labeledFaceDescriptors = await loadLabeledImages();
       if (!labeledFaceDescriptors.length) {
-        alert("⚠️ لم يتم تحميل أي وجه للتعرف عليه.");
+        alert("⚠️ لم يتم تحميل أي وجه.");
         return;
       }
 
-      const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+      faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
 
       video.addEventListener('play', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        const displaySize = { width: video.videoWidth, height: video.videoHeight };
-        faceapi.matchDimensions(canvas, displaySize);
-        const ctx = canvas.getContext('2d');
 
         setInterval(async () => {
-          if (video.paused || video.ended) return;
-
-          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
             .withFaceLandmarks()
             .withFaceDescriptors();
 
-          const resizedDetections = faceapi.resizeResults(detections, displaySize);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          resizedDetections.forEach(detection => {
-            const match = faceMatcher.findBestMatch(detection.descriptor);
-            const box = detection.detection.box;
-            const drawBox = new faceapi.draw.DrawBox(box, { label: match.toString(), boxColor: '#006233' });
-            drawBox.draw(canvas);
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          const resized = faceapi.resizeResults(detections, {
+            width: canvas.width,
+            height: canvas.height
           });
-        }, 500); // كل نصف ثانية
-      });
-    }
+
+          for (const detection of resized) {
+            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+            const name = bestMatch.label;
+            const box = detection.detection.box;
+
+            // رسم المستطيل
+            context.strokeStyle = '#00ff00';
+            context.lineWidth = 2;
+            context.strokeRect(box.x, box.y, box.width, box.height);
+
+            // اسم الطالب
+            context.fillStyle = '#006233';
+            context.fillRect(box.x, box.y - 20, box.width, 20);
+            context.fillStyle = 'white';
+            context.font = '16px Cairo';
+            context.fillText(name, box.x + 5, box.y - 5);
+
+            // تشغيل صوت وتسجيل الحضور
+if (name !== 'unknown' && !attendanceSet.has(name)) {
+  attendanceSet.add(name);
+  beep.play();
+  console.log("✅ تم تسجيل حضور:", name);
+  addRecognizedName(name);
+  // sendToGoogleSheet(name);
+}
+
 
     window.addEventListener('DOMContentLoaded', async () => {
       await startVideo();
-      await initFaceRecognition();
+      await init();
     });
   </script>
 </body>
