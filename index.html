@@ -32,6 +32,9 @@
       cursor: pointer;
     }
   </style>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
 </head>
 <body>
   <h1>📷 نظام الحضور بالتعرف على الوجوه</h1>
@@ -144,4 +147,43 @@
     });
   </script>
 </body>
+  <script>
+  const labeledFaceDescriptors = [];
+
+  async function loadLabeledImages() {
+    const labels = ['محمد أحمد', 'سارة بوزيد', 'يوسف بلقاسم']; // أسماء التلاميذ
+
+    for (const label of labels) {
+      const imgUrl = `students/${label}.jpg`;
+      const img = await faceapi.fetchImage(imgUrl);
+
+      const detections = await faceapi
+        .detectSingleFace(img)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detections) {
+        console.warn(`لم يتم التعرف على وجه في الصورة: ${label}`);
+        continue;
+      }
+
+      const descriptor = detections.descriptor;
+      labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(label, [descriptor]));
+    }
+
+    console.log("✅ تم تحميل قاعدة بيانات الوجوه بنجاح");
+  }
+
+  // تحميل النماذج المطلوبة من face-api.js
+  async function loadModelsAndStart() {
+    await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+    await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+    await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+
+    await loadLabeledImages();
+  }
+
+  loadModelsAndStart();
+</script>
+
 </html>
