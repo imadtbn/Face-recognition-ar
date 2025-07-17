@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>نظام التعرف على الوجوه - نسخة خفيفة للجوال</title>
+  <title>نظام التعرف على الوجوه</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -11,6 +11,14 @@
       text-align: center;
       background: #f0f0f0;
     }
+    h2 {
+      color: #006233;
+      margin-top: 10px;
+    }
+    .video-container {
+      position: relative;
+      display: inline-block;
+    }
     video, canvas {
       width: 100%;
       max-width: 320px;
@@ -18,25 +26,32 @@
       border-radius: 12px;
       margin-top: 15px;
     }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
   </style>
 </head>
 <body>
-  <h2>👁️ نظام التعرف على الوجوه</h2>
-  <video id="video" autoplay muted playsinline></video>
-  <canvas id="overlay" style="position: absolute; top: 0; left: 0;"></canvas>
+  <h2>📸 نظام التعرف على الوجوه</h2>
+  <div class="video-container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
 
-  <!-- مكتبة face-api.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('overlay');
-    let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    let labeledFaceDescriptors = [];
 
+    // بدء تشغيل الكاميرا
     async function startVideo() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'environment',
+            facingMode: { ideal: 'environment' },
             width: { ideal: 320 },
             height: { ideal: 240 }
           },
@@ -44,35 +59,74 @@
         });
         video.srcObject = stream;
       } catch (err) {
-        alert("حدث خطأ في تشغيل الكاميرا: " + err.message);
+        alert("⚠️ تعذر تشغيل الكاميرا: " + err.message);
         console.error(err);
       }
     }
 
-    async function initFaceDetection() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri('/models'); // تأكد من أن مجلد models موجود
+    // تحميل صور الطلاب وتحويلها إلى أوصاف الوجوه
+    async function loadLabeledImages() {
+      const labels = ['adel', 'فاطمة', 'imad']; // ضع هنا أسماء الصور بدون .jpg
+
+      return Promise.all(
+        labels.map(async label => {
+          const imgUrl = `students/${label}.jpg`;
+          const img = await faceapi.fetchImage(imgUrl);
+          const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+
+          if (!detection) {
+            console.warn(`❌ لم يتم التعرف على وجه في صورة ${label}`);
+            return null;
+          }
+
+          return new faceapi.LabeledFaceDescriptors(label, [detection.descriptor]);
+        })
+      ).then(descriptors => descriptors.filter(Boolean)); // حذف العناصر الفارغة
+    }
+
+    async function initFaceRecognition() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
+
+      labeledFaceDescriptors = await loadLabeledImages();
+      if (!labeledFaceDescriptors.length) {
+        alert("⚠️ لم يتم تحميل أي وجه للتعرف عليه.");
+        return;
+      }
+
+      const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
 
       video.addEventListener('play', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
         faceapi.matchDimensions(canvas, displaySize);
+        const ctx = canvas.getContext('2d');
 
         setInterval(async () => {
-          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-          const resizedDetections = faceapi.resizeResults(detections, displaySize);
+          if (video.paused || video.ended) return;
 
-          const ctx = canvas.getContext('2d');
+          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptors();
+
+          const resizedDetections = faceapi.resizeResults(detections, displaySize);
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          faceapi.draw.drawDetections(canvas, resizedDetections);
-        }, 300); // كشف كل 300ms فقط لتحسين الأداء
+
+          resizedDetections.forEach(detection => {
+            const match = faceMatcher.findBestMatch(detection.descriptor);
+            const box = detection.detection.box;
+            const drawBox = new faceapi.draw.DrawBox(box, { label: match.toString(), boxColor: '#006233' });
+            drawBox.draw(canvas);
+          });
+        }, 500); // كل نصف ثانية
       });
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
       await startVideo();
-      await initFaceDetection();
+      await initFaceRecognition();
     });
   </script>
 </body>
